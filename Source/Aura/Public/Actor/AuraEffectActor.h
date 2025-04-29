@@ -61,6 +61,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FGameplayEffectItem> GameplayEffects;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	float ActorLevel = 1.f;
+
 private:
 	void RemoveInfiniteEffectByPolicy(AActor* TargetActor, const FGameplayEffectItem& GameplayEffectItem);
 };

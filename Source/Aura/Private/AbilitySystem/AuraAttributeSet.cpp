@@ -2,6 +2,9 @@
 
 
 #include "AbilitySystem/AuraAttributeSet.h"
+
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
 
 UAuraAttributeSet::UAuraAttributeSet()
@@ -20,6 +23,72 @@ void UAuraAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAuraAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAuraAttributeSet, Mana, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAuraAttributeSet, MaxMana, COND_None, REPNOTIFY_Always);
+}
+
+void UAuraAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+
+	if (Attribute == GetHealthAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
+	}
+	
+	if (Attribute == GetManaAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxMana());
+	}
+}
+
+void UAuraAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& Data,
+                                            FGameplayEffectContextHandle& EffectContextHandle,
+                                            FEffectProperties& SourceProps, FEffectProperties& TargetProps) const
+{
+	EffectContextHandle = Data.EffectSpec.GetContext();
+	SourceProps.ASC = EffectContextHandle.GetOriginalInstigatorAbilitySystemComponent();
+
+	if (IsValid(SourceProps.ASC) && SourceProps.ASC->AbilityActorInfo.IsValid() && SourceProps.ASC->AbilityActorInfo->AvatarActor.IsValid())
+	{
+		SourceProps.AvatarActor = SourceProps.ASC->AbilityActorInfo->AvatarActor.Get();
+		SourceProps.Controller = SourceProps.ASC->AbilityActorInfo->PlayerController.Get();
+		if (!IsValid(SourceProps.Controller) && IsValid(SourceProps.AvatarActor))
+		{
+			if (const APawn* Pawn = Cast<APawn>(SourceProps.AvatarActor))
+			{
+				SourceProps.Controller = Pawn->GetController();
+			}
+		}
+		if (IsValid(SourceProps.Controller))
+		{
+			SourceProps.Character = SourceProps.Controller->GetCharacter();
+		}
+	}
+
+	if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+	{
+		TargetProps.AvatarActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+		TargetProps.Controller = Data.Target.AbilityActorInfo->PlayerController.Get();
+
+		if (IsValid(TargetProps.Controller))
+		{
+			TargetProps.Character = TargetProps.Controller->GetCharacter();
+		}
+
+		TargetProps.ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(TargetProps.AvatarActor);
+	}
+}
+
+void UAuraAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
+{
+	Super::PostGameplayEffectExecute(Data);
+
+	FGameplayEffectContextHandle EffectContextHandle;
+	FEffectProperties SourceProps;
+	FEffectProperties TargetProps;
+
+	SetEffectProperties(Data, EffectContextHandle, SourceProps, TargetProps);
+
+	//TODO: Use the effect properties stored?
 }
 
 void UAuraAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) const
